@@ -1,0 +1,252 @@
+"""Python libraries. Numpy is a Python library for numerical manipulations. Pandas is a Python library designed to make working with relational or labeld data intuitive.
+SQLAlchemy is a toolkit of Python SQL. The sqlalchemy.orm library allows developers to work with databases using an Object-Relational Mapping ORM framework allowing seamless communication
+between relational databases and object oriented programming languages. The statsmodels library is being used for statistical tasks for state spece modeling and univarient time-series analysis.
+Matplotlib is a Python library used to create the figures.  Sklearn is a machine learning library."""
+
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm 
+import matplotlib.pyplot as plt
+from statsmodels.tsa.statespace.structural import UnobservedComponents
+from sklearn.preprocessing import StandardScaler  
+from sklearn.linear_model import SGDRegressor
+from sklearn.pipeline import make_pipeline
+from sqlalchemy import create_engine, text, Column, Integer, Float, Table, MetaData, inspect
+from sqlalchemy.orm import declarative_base
+
+"""The following sets the global variable for the initial trends as empty. This variable will be populated in the for loop with the initial trends for the machine learning algorithm to read
+from for each event magnitude. This will produce four initial trends tables."""
+initialTrends = []
+
+"""The GeneratingUnitInertia dictionary contains the different types of generation sources representative of the Texas grid and their subsequent inertia values. The GeneratingUnitTypeCount are the associated number of each generation unit."""
+
+GeneratingUnitInertia = {'nuclear': 5.9, 'gas': 4.2, 'coal': 4.2, 'hydro': 2.4, 'solar': 0.01, 'storage': 0.01, 'wind': 0.01}
+
+"""The generating unit is a key which will allow for example, 4 counts of 5.9hz/second inertia, 44 counts of 4.2hz/second inertia."""
+                                                                                                                                
+GeneratingUnitTypeCount = {'nuclear': 4, 'gas': 44, 'coal': 10, 'hydro': 1, 'solar': 13, 'storage': 3, 'wind': 25}
+
+"""The event magnitude represents different scaled frequency deviation events. This is scaled to demonstrate the efficacy of the method for varying events. The small event is representative of everyday while the serious is representative
+of the 2021 Texas Winter Storm.""""                                                                                                                                 
+                                                                                                                                
+eventMagnitude = {'small': 0.00125, 'medium': 0.0025, 'large': 0.00375, 'serious': 0.005}
+
+"""The generatingUnitsCount is the total number of generating units for each event magnitude. This populates the initial trends tables. It will provide 10,000 frequency values across 100 generation sources."""
+generatingUnitsCount = 100
+
+"""The generatingUnitColumnNames will generate the column names for the 100 samplese for the  initial trends"""
+
+generatingUnitColumnNames = [f'GeneratingUnit{i+1}' for i in range(generatingUnitsCount)]
+
+"""This will connect to local MySQL server """
+connection_string = "mysql+mysqlconnector://root:grace@localhost:3306/" # Replace Username, Password, FQDN, and Port with local MySql server connection information
+db_name = "freqsync"
+
+"""The code creates 812 files.  Including the maachine learnig predivtive graphs, the optimization value graphs, and the state space model results, and efficiency calcuations. The following line of code is suppressing the warning for a large number of plots."""
+
+plt.rcParams['figure.max_open_warning'] = 0
+
+"""The following definitions will be called to check the existance of, create, and drop the initial database 'freqsync'. This provides a clean empty database to be populated with each run of the application.
+This also prevents database conflict errors."""
+
+def database_exists(engine, db_name):       #Checks if the database exists
+    with engine.connect() as conn:          #Establishes a connection to MySQL through the port conenction
+        result = conn.execute(text(f"SHOW DATABASES LIKE '{db_name}'"))     #MySQL command shows databases
+        return result.fetchone() is not None
+
+def create_database(engine, db_name):       #Creates the database if it doesn not exist
+    with engine.connect() as conn:          #Establishes a connection to MySQL through the port conenction
+        conn.execute(text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))      #MySQL command to create the database freqsync
+        conn.commit()
+
+def drop_database(engine, db_name):     #Drops the database
+   with engine.connect() as conn:       #Establishes a connection to MySQL through the port conenction
+        conn.execute(text(f"DROP DATABASE {db_name}"))  #If the database is exists, database is dropped. 
+        conn.commit()
+        
+"""The follow code will test for and drop if neccesary the  'freqsync' database, and create a fresh empty database."""
+
+db_engine = create_engine("mysql+mysqldb://root:grace@localhost") # Replace Username, Password, and FQDN with local MySql server connection information
+if database_exists(db_engine, db_name):     #If the database exists it will be dropped. 
+    drop_database(db_engine, db_name)
+create_database(db_engine, db_name)         #The databse is created
+db_engine.dispose()
+engine = create_engine(f"{connection_string}{db_name}")     #Establishes a connection to MySQL through the MySQL database freqsync
+
+"""The following code builds the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change. """
+
+inertia_metadata = MetaData()
+inertia_columns = [Column(f'GeneratingUnit{j+1}', Float) for j in range(generatingUnitsCount)]      #Creates the columns for the inertia table
+inertia_table = Table('unitinertia', inertia_metadata, *inertia_columns)
+inertia_metadata.create_all(engine)
+
+inertia_data = {}       #Sets the inertia_data variable tuple empty
+unit_index = 0          #Sets the unit_idex to zero
+for unit_type, count in GeneratingUnitTypeCount.items():    #Loops through the number of generating units in each type. 
+    for _ in range(count):                                  #For example, This allows 4 nuclear generation at 5.9hz.
+        unit_name = f'GeneratingUnit{unit_index + 1}'       #Sets the unit_name for each event magnitude for 100 generation sources beginning at 1
+        inertia_data[unit_name] = GeneratingUnitInertia[unit_type]
+        unit_index += 1                                     #This is incremented after at the end of the for loop to place the data in the correct database column. 
+
+"""The following code populates the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change. It will be used by Adaline when determining the optimal
+frequency."""
+
+pd.DataFrame([inertia_data]).to_sql('unitinertia', engine, if_exists='append', index=False)
+
+"""This is the main for loop. This is run for each event magnitude. The loop will create each of the four initial trends tables with the event mangnitudes. The machine learning algorithm will read from
+the corresponding event magnitude intial trends table and produce a forecasted output. Adaline will read the last row of the forecasted output and the unitinertia table to produce the optimal frequency. The current go low
+methods will be compared with the ML/AI method and the efficiency of the ML/AI method is provided."""
+    
+for magnitude_name, event in eventMagnitude.items(): #Loop to generate four event magintude porcesses, tables, files, and plots.
+
+    metadata = MetaData()
+    if inspece).has_table(f'initialtrends_{magnitude_name}'):           I
+        Table(f'initialtrends_{magnitude_name}', metadata, autoload_with=engine).drop(engine)
+
+    trends_metadata = MetaData()
+    trends_columns = [Column('Date', Integer)] + [Column(f'GeneratingUnit{i+1}', Float) for i in range(generatingUnitsCount)]       #Creates the initial trends table columns
+    trends_table = Table(f'initialtrends_{magnitude_name}', trends_metadata, *trends_columns)
+    trends_metadata.create_all(engine)
+
+"""Creates the columns for the sensor values and setting the values to decrement. """
+
+    sensorValues = {col: [] for col in generatingUnitColumnNames}       #Populates the initial trends tables
+    generationUnitSequenceCount = -1        #Decrements the sensor values
+    
+"""This calculation is used to determine the frequency values for each of the initial trends tables. A decrement value was needed to offset the 100 nominal frequency values to be used for the initial table fed into ULLT.
+The frequency values for the initial trends table are created based on inertial values. However, Univariant Linear Local Trend is not reading the inertia values.
+The values are being decremented based on the event. The sensor values are all set to start at the optimal 60hz. The serious event decrements from the optimal 60hz value to 59.50hz for the lowest inertia generation source. The decrement value is uniform for all
+the events. This keeps the models consistent. This is counting how many generation units are 5.9, 4.2, 2.4, and 0.01 This means the first four columns will be using inertia 5.9, then 54 columns will use 4.2, one value
+uses 2.4 and 41 geneartion units use 0.01."""
+
+    for key, count in GeneratingUnitTypeCount.items():      #Loop to decrement each generation source based on event magnitude and inertia.
+        inertia = GeneratingUnitInertia[key]    #Inertia is set to the GeneratingUnitInertia. This considers each inertia 5.9, 4.2, 2.4, and 0.01
+        for _ in range(count):                  #In the range of the count of generation units inertia values 4, 54, 1 and 41 an analog of the Texas grid. There are a total of 100 generation sources.
+            generationUnitSequenceCount += 1    #The sensor values are being decremented based on the inertia values but the machine learning algorithm will not read the values, only see the effects.
+            column_name = generatingUnitColumnNames[generationUnitSequenceCount]        #The column_name is set to the corresponding column for the generation source
+            sensorValue = 60.0      #The sensor values begin at 60.0hz
+            frequencyChangePerSecond = (event / inertia) / 100        """Calculation. The max event amplitude where E is 0.005 and I is the inertial geneartion source. This divides by 100 because a second decrement value was neccesary.  See thesis text for detailed methodolgy."""
+
+            unit_values = [sensorValue - frequencyChangePerSecond * b for b in range(100)]      #Calculation used for decremented the 100 frequencies for each generation unit. The serious event will decrement to 59.5hz for lowest inertia generation soruce.
+            sensorValues[column_name] = unit_values        #Correlates sensor values to correct database column.
+
+    with engine.connect() as connection:        #The MySQL database is connected
+        for row in range(100):                  #There are 100 frequency values. This can be updated. But updating would require the calculation for decrement to also be updated. 
+            values = {"date": row + 1}      #The first row is the date, and is required for the ULLT model calculations. The following rows are the sequentially decremented sesor values reprenting the fequrency of each source at a specific time.
+            values.update({col: sensorValues[col][row] for col in generatingUnitColumnNames})
+
+            insert_query = text(                                                                                #Sensor values are inserted.
+                f"INSERT INTO initialtrends_{magnitude_name} (Date, {', '.join(generatingUnitColumnNames)}) "
+                f"VALUES (:date, {', '.join([f':{col}' for col in generatingUnitColumnNames])})"
+            )
+            connection.execute(insert_query, values)
+        connection.commit()
+
+    forecast_dict = {}      #This sets the local variable tuple empty for the next iteration of the loop.
+    observed_df = None
+
+"""The initial trends are read for all four tables"""
+
+    for freq in range(1, 101):
+        query = f"SELECT GeneratingUnit{freq} FROM initialtrends_{magnitude_name} WHERE GeneratingUnit{freq} IS NOT NULL"
+        df = pd.read_sql_query(query, engine)
+
+        if df.empty:
+            continue
+"""Univariate Local Linear Trend ULLT model is a machine learning model using the Python statsmodel library.  This is using the library from statsmodels.tsa.statespace.structural import UnobservedComponents. Powell is an optimization method."""
+
+        model = UnobservedComponents(df[f"GeneratingUnit{freq}"], 'local linear trend') #Builds local linear trend model.
+        result = model.fit(disp=False, method='powell')     #The powell method was used for reasonable repeatable results.
+
+""" The follow code is providing the ULLT observation, one-step ahead prediction and forecastfor each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude.
+This will produce four-hundred total figures. """
+
+        with open(f"GeneratingUnit{freq}_{magnitude_name}_StateSpaceModelResults.txt", 'w') as f:       #This is opening the file for the State Space Model table. This is represented as a figure
+            f.write(str(result.summary()))      #This writes 400 files total. One-hundred summaries are provided for each frequency for each event magnitude
+
+"""Series forecasting is generating a forecast for 10 steps."""
+
+        predict = result.get_prediction() #Produces the predictions
+        forecast = result.get_forecast(steps=10)        #The number of predictions can be updated here steps = ""
+    
+        fig, ax = plt.subplots(figsize=(10, 4))         #This is the dimension of the plot for the predicted frequency
+        df[f"GeneratingUnit{freq}"].plot(ax=ax, style='k.', label='Observations')
+        predict.predicted_mean.plot(ax=ax, label='One-step-ahead Prediction')
+        
+""" The following code provides the ULLT observation, one-step ahead prediction and forecast for each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude.
+This will produce four-hundred total figures. """
+
+        forecast.predicted_mean.plot(ax=ax, style='r', label='Forecast')
+        ax.legend(loc='lower left')             #This provides a legend for the plot
+        plt.savefig(f"GeneratingUnit{freq}_{magnitude_name}.png")       #The GenerationUnit prediction value figure is saved for each magnitude. This will produce 400 figures. 
+        plt.close()
+
+        forecast_dict[f'GeneratingUnit{freq}'] = forecast.predicted_mean
+
+    forecast_df = pd.DataFrame(forecast_dict)
+    forecast_df.to_sql(f'forecast_output_{magnitude_name}', engine, if_exists='replace', index_label='date')
+
+    inertia = pd.read_sql_query(text("""SELECT * FROM unitinertia"""), engine)
+    frequency = pd.read_sql_query(text(f"SELECT * FROM forecast_output_{magnitude_name} WHERE date IN (SELECT MAX(date) FROM forecast_output_{magnitude_name})"), engine)
+
+    frequency.drop(columns='date', axis=1, inplace=True)
+    inertia = inertia.values.ravel()
+    frequency = frequency.values.ravel()
+
+    scaler = StandardScaler()       #Compute relevant statistics on the samples and store the mean and standard deviation. 
+    inertia_scaled = scaler.fit_transform(inertia.reshape(-1, 1))
+
+
+    adaline_model = make_pipeline(StandardScaler(), SGDRegressor(eta0=0.01, max_iter=1000, tol=1e-3)) #The Adaline model applies the stochastic gradient descent regressor
+
+    adaline_model.fit(inertia_scaled, frequency)
+
+    optimal_frequency = adaline_model.predict([[inertia_scaled.mean()]])        #Predict single synchronized frequency using the mean of scaled inertia values.
+    
+""" The optimal control frequency figure is produced for each event magnitude. This will produce four files. """
+
+    f = open( f'optimal_frequency_{magnitude_name}.txt', 'w' )      #Txt file is written to write the optimal frequency value for each event magnitude
+    f.write(str(optimal_frequency))     #Txt file of the optimal frequency value is written for each event magniture. This will produce four files
+    f.close()
+    
+""" The follow code provides the Adaline optimal control frequency for each event magnitudue figure.  The opimal control frequency figure is produced for each event magnitude. This will produce four files. """
+
+    plt.figure(figsize=(10, 6))     #This is the dimension of the plot for the optimal control frequency
+    plt.scatter(inertia, frequency, color='blue', label='Original Data')        #The blue values represent the inertial values. 
+    plt.axhline(y=optimal_frequency[0], color='red', linestyle='--', label='Optimal Frequency')     #The red line represents the predicted value that the generation units should synchronize to.
+    plt.xlabel('Inertia')       #The x value reperesents the inertia
+    plt.ylabel('Frequency')     #The y value represents the frequency
+    plt.title('Original Data with Predicted Synchronized Frequency')        #The plot title. This plot shows the original data and where th frequency needs to synchronize to. 
+    plt.legend()        #This provides a legend for the plot
+    plt.grid(True)      #The plot grid is on.
+    plt.savefig(f"optimumControlFrequency_{magnitude_name}")            #This will save four figures. Each figure represents the optimum control frequency for each event magnitude.
+    
+""" The following codes provides the comparison equation for the current go-low method and the AI/ML method. The efficiency gain is printed to a txt file for each event magnitude. This will produce four files.
+This calculation reads the initeal trends table for each event magnitude. It reads the minimum value. This represent the go low value for current methods. The golowdiff is the current method. This go low frequency is
+subtracted from the optimum 60hz frequency. The optimaldiff is the AI/ML uses the AI/ML predicted method. The optimal value predicted by Adaline is subtracted from the optimum 60hz frequency. The efficiecy calculation
+takes the optmialdiff divided by the golowdiff. """
+
+    query3 = f"SELECT * FROM initialtrends_{magnitude_name};"           #Creates query text for the inital trends table for each event magnituted to query3
+    golow_df = pd.read_sql_query(query3, engine).set_index('Date')      #Executes the query 
+    golow_df.head()    
+    golowvalueseries = golow_df.min()       #This finds the minimal value which represnts the go low value
+    golowvalue = float(golowvalueseries.min())    #This sets the go low value to a float value
+    optimalvalueseries = optimal_frequency.max()    
+    optimalvalue = float(optimalvalueseries)    #The optimal value is written as a float value.
+    golowdiff = 60.0 - golowvalue        #The 60.0hz optimal frequency subtracts the minimum value. This represents the go-low value
+    optimaldiff = 60.0 - optimalvalue        #The 60.0hz optimal frequency subtracts the Adaline optimized value. 
+    efficiencygainraw = optimaldiff / golowdiff        #Calculation described in deatail in thesis document text
+    efficiencygainpercent = 100 - (efficiencygainraw * 100) #This provides the efficiency gain percentage value
+    f = open(f'efficiency_gain_percent_{magnitude_name}.txt', 'w' )     #Txt file is written to write efficiency gain percentage value for each event magnitude.
+    f.write(str(efficiencygainpercent))     #Txt file of the efficiency gain percent is written. This will produce four files 
+    f.close()
+
+
+engine.dispose() #Closes connection to database
+
+"""The print statement is printed to the console when the program has finished running indicating a successful completetion of the application. There is a total of 812 files. The State Space Model Results were produced for each generating unit for each magnitude producing
+four-hundred images. The observation, one step-ahead prediction and forecast was also produced for each generation unit for each magnitude resulting in four-hundred additional images. In addition, the optimum control
+frequency for the generation units to synchronize to is provided for each four event magnitudes. Lastly, there were four text files produced which provide the efficiency gain percent for each event magnitude when comparing
+the current go-low method to AI/ML optimization. """
+
+print("Processing Completed. All Files Have Been Successfully Written.")
