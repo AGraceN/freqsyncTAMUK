@@ -228,15 +228,15 @@ takes the optmialdiff divided by the golowdiff. """
 
     query3 = f"SELECT * FROM initialtrends_{magnitude_name};"           #Creates query text for the inital trends table for each event magnituted to query3
     golow_df = pd.read_sql_query(query3, engine).set_index('Date')      #Executes the query 
-    golow_df.head()    
-    golowvalueseries = golow_df.min()       #This finds the minimal value which represnts the go low value
-    golowvalue = float(golowvalueseries.min())    #This sets the go low value to a float value
-    optimalvalueseries = optimal_frequency.max()    
+    golow_df.head()  #Returns the top rows of the dataframe.  Due to the limited number of rows, this returns the all rows
+    golowvalueseries = golow_df.min()       #Finds the minimal value which represnts the go low value
+    golowvalue = float(golowvalueseries.min())    #Sets the go low value to a float value
+    optimalvalueseries = optimal_frequency.max()  #Returns the maximum value from the dataframe
     optimalvalue = float(optimalvalueseries)    #The optimal value is written as a float value.
     golowdiff = 60.0 - golowvalue        #The 60.0hz optimal frequency subtracts the minimum value. This represents the go-low value
     optimaldiff = 60.0 - optimalvalue        #The 60.0hz optimal frequency subtracts the Adaline optimized value. 
     efficiencygainraw = optimaldiff / golowdiff        #Calculation described in deatail in thesis document text
-    efficiencygainpercent = 100 - (efficiencygainraw * 100) #This provides the efficiency gain percentage value
+    efficiencygainpercent = 100 - (efficiencygainraw * 100) #Provides the efficiency gain percentage value
     f = open(f'efficiency_gain_percent_{magnitude_name}.txt', 'w' )     #Txt file is written to write efficiency gain percentage value for each event magnitude.
     f.write(str(efficiencygainpercent))     #Txt file of the efficiency gain percent is written. This will produce four files 
     f.close()
