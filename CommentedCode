@@ -39,7 +39,7 @@ generatingUnitsCount = 100
 generatingUnitColumnNames = [f'GeneratingUnit{i+1}' for i in range(generatingUnitsCount)]
 
 """This will connect to local MySQL server """
-connection_string = "mysql+mysqlconnector://root:grace@localhost:3306/" # Replace Username, Password, FQDN, and Port with local MySql server connection information
+connection_string = "mysql+mysqlconnector://root:password@localhost:3306/" # Replace Username, Password, FQDN, and Port with local MySql server connection information
 db_name = "freqsync"
 
 """The code creates 812 files.  Including the maachine learnig predivtive graphs, the optimization value graphs, and the state space model results, and efficiency calcuations. The following line of code is suppressing the warning for a large number of plots."""
@@ -66,7 +66,7 @@ def drop_database(engine, db_name):     #Drops the database
         
 """The follow code will test for and drop if neccesary the  'freqsync' database, and create a fresh empty database."""
 
-db_engine = create_engine("mysql+mysqldb://root:grace@localhost") # Replace Username, Password, and FQDN with local MySql server connection information
+db_engine = create_engine("mysql+mysqldb://root:password@localhost") # Replace Username, Password, and FQDN with local MySql server connection information
 if database_exists(db_engine, db_name):     #If the database exists it will be dropped. 
     drop_database(db_engine, db_name)
 create_database(db_engine, db_name)         #The databse is created
