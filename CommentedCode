@@ -16,38 +16,37 @@ from sqlalchemy.orm import declarative_base
 
 """The following sets the global variable for the initial trends as empty. This variable will be populated in the for loop with the initial trends for the machine learning algorithm to read
 from for each event magnitude. This will produce four initial trends tables."""
+
 initialTrends = []
 
-"""The GeneratingUnitInertia dictionary contains the different types of generation sources representative of the Texas grid and their subsequent inertia values. The GeneratingUnitTypeCount are the associated number of each generation unit."""
+#The GeneratingUnitInertia dictionary contains the different types of generation sources representative of the Texas grid and their subsequent inertia values. The GeneratingUnitTypeCount are the associated number of each generation unit.
 
 GeneratingUnitInertia = {'nuclear': 5.9, 'gas': 4.2, 'coal': 4.2, 'hydro': 2.4, 'solar': 0.01, 'storage': 0.01, 'wind': 0.01}
 
-"""The generating unit is a key which will allow for example, 4 counts of 5.9hz/second inertia, 44 counts of 4.2hz/second inertia."""
+#The generating unit is a key which will allow for example, 4 counts of 5.9hz/second inertia, 44 counts of 4.2hz/second inertia.
                                                                                                                                 
 GeneratingUnitTypeCount = {'nuclear': 4, 'gas': 44, 'coal': 10, 'hydro': 1, 'solar': 13, 'storage': 3, 'wind': 25}
 
-"""The event magnitude represents different scaled frequency deviation events. This is scaled to demonstrate the efficacy of the method for varying events. The small event is representative of everyday while the serious is representative
-of the 2021 Texas Winter Storm."""                                                                                                                                 
+#The event magnitude represents different scaled frequency deviation events. This is scaled to demonstrate the efficacy of the method for varying events. The small event is representative of everyday while the serious is representativeof the 2021 Texas Winter Storm.
                                                                                                                                 
 eventMagnitude = {'small': 0.00125, 'medium': 0.0025, 'large': 0.00375, 'serious': 0.005}
 
-"""The generatingUnitsCount is the total number of generating units for each event magnitude. This populates the initial trends tables. It will provide 10,000 frequency values across 100 generation sources."""
+#The generatingUnitsCount is the total number of generating units for each event magnitude. This populates the initial trends tables. It will provide 10,000 frequency values across 100 generation sources.
 generatingUnitsCount = 100
 
-"""The generatingUnitColumnNames will generate the column names for the 100 samplese for the  initial trends"""
+#The generatingUnitColumnNames will generate the column names for the 100 samplese for the  initial trends
 
 generatingUnitColumnNames = [f'GeneratingUnit{i+1}' for i in range(generatingUnitsCount)]
 
-"""This will connect to local MySQL server """
+#This will connect to local MySQL server
 connection_string = "mysql+mysqlconnector://root:password@localhost:3306/" # Replace Username, Password, FQDN, and Port with local MySql server connection information
 db_name = "freqsync"
 
-"""The code creates 812 files.  Including the maachine learnig predivtive graphs, the optimization value graphs, and the state space model results, and efficiency calcuations. The following line of code is suppressing the warning for a large number of plots."""
+#The code creates 812 files.  Including the maachine learnig predivtive graphs, the optimization value graphs, and the state space model results, and efficiency calcuations. The following line of code is suppressing the warning for a large number of plots.
 
 plt.rcParams['figure.max_open_warning'] = 0
 
-"""The following definitions will be called to check the existance of, create, and drop the initial database 'freqsync'. This provides a clean empty database to be populated with each run of the application.
-This also prevents database conflict errors."""
+#The following definitions will be called to check the existance of, create, and drop the initial database 'freqsync'. This provides a clean empty database to be populated with each run of the application. This also prevents database conflict errors.
 
 def database_exists(engine, db_name):       #Checks if the database exists
     with engine.connect() as conn:          #Establishes a connection to MySQL through the port conenction
@@ -64,7 +63,7 @@ def drop_database(engine, db_name):     #Drops the database
         conn.execute(text(f"DROP DATABASE {db_name}"))  #If the database is exists, database is dropped. 
         conn.commit()
         
-"""The follow code will test for and drop if neccesary the  'freqsync' database, and create a fresh empty database."""
+#The follow code will test for and drop if neccesary the  'freqsync' database, and create a fresh empty database.
 
 db_engine = create_engine("mysql+mysqldb://root:password@localhost") # Replace Username, Password, and FQDN with local MySql server connection information
 if database_exists(db_engine, db_name):     #If the database exists it will be dropped. 
@@ -73,7 +72,7 @@ create_database(db_engine, db_name)         #The databse is created
 db_engine.dispose()
 engine = create_engine(f"{connection_string}{db_name}")     #Establishes a connection to MySQL through the MySQL database freqsync
 
-"""The following code builds the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change. """
+#The following code builds the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change.
 
 inertia_metadata = MetaData()
 inertia_columns = [Column(f'GeneratingUnit{j+1}', Float) for j in range(generatingUnitsCount)]      #Creates the columns for the inertia table
@@ -88,8 +87,7 @@ for unit_type, count in GeneratingUnitTypeCount.items():    #Loops through the n
         inertia_data[unit_name] = GeneratingUnitInertia[unit_type]
         unit_index += 1                                     #This is incremented after at the end of the for loop to place the data in the correct database column. 
 
-"""The following code populates the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change. It will be used by Adaline when determining the optimal
-frequency."""
+#The following code populates the unitinertia table. This table is not in the main for loop because it's a static table. The inertia values will not change. It will be used by Adaline when determining the optimalfrequency.
 
 pd.DataFrame([inertia_data]).to_sql('unitinertia', engine, if_exists='append', index=False)
 
@@ -108,9 +106,9 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
     trends_table = Table(f'initialtrends_{magnitude_name}', trends_metadata, *trends_columns)
     trends_metadata.create_all(engine)
 
-    """Creates the columns for the sensor values and setting the values to decrement. """
+#Creates the columns for the sensor values and setting the values to decrement.
 
-    sensorValues = {col: [] for col in generatingUnitColumnNames}        #Populates the initial trends tables
+    sensorValues = {col: [] for col in generatingUnitColumnNames}       #Populates the initial trends tables
     generationUnitSequenceCount = -1        #Decrements the sensor values
     
     """This calculation is used to determine the frequency values for each of the initial trends tables. A decrement value was needed to offset the 100 nominal frequency values to be used for the initial table fed into ULLT.
@@ -125,7 +123,7 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
             generationUnitSequenceCount += 1    #The sensor values are being decremented based on the inertia values but the machine learning algorithm will not read the values, only see the effects.
             column_name = generatingUnitColumnNames[generationUnitSequenceCount]        #The column_name is set to the corresponding column for the generation source
             sensorValue = 60.0      #The sensor values begin at 60.0hz
-            frequencyChangePerSecond = (event / inertia) / 100        #Calculation. The max event amplitude where E is 0.005 and I is the inertial geneartion source. This divides by 100 because a second decrement value was neccesary.  See thesis text for detailed methodolgy."""
+            frequencyChangePerSecond = (event / inertia) / 100  #Calculation. The max event amplitude where E is 0.005 and I is the inertial geneartion source. This divides by 100 because a second decrement value was neccesary.  See thesis text for detailed methodolgy.
 
             unit_values = [sensorValue - frequencyChangePerSecond * b for b in range(100)]      #Calculation used for decremented the 100 frequencies for each generation unit. The serious event will decrement to 59.5hz for lowest inertia generation soruce.
             sensorValues[column_name] = unit_values        #Correlates sensor values to correct database column.
@@ -145,7 +143,7 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
     forecast_dict = {}      #This sets the local variable tuple empty for the next iteration of the loop.
     observed_df = None
 
-    """The initial trends are read for all four tables"""
+    #The initial trends are read for all four tables#
 
     for freq in range(1, 101):
         query = f"SELECT GeneratingUnit{freq} FROM initialtrends_{magnitude_name} WHERE GeneratingUnit{freq} IS NOT NULL"
@@ -153,18 +151,17 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
 
         if df.empty:
             continue
-        """Univariate Local Linear Trend ULLT model is a machine learning model using the Python statsmodel library.  This is using the library from statsmodels.tsa.statespace.structural import UnobservedComponents. Powell is an optimization method."""
+        #Univariate Local Linear Trend ULLT model is a machine learning model using the Python statsmodel library.  This is using the library from statsmodels.tsa.statespace.structural import UnobservedComponents. Powell is an optimization method.
 
         model = UnobservedComponents(df[f"GeneratingUnit{freq}"], 'local linear trend') #Builds local linear trend model.
         result = model.fit(disp=False, method='powell')     #The powell method was used for reasonable repeatable results.
 
-        """ The follow code is providing the ULLT observation, one-step ahead prediction and forecastfor each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude.
-        This will produce four-hundred total figures. """
+        #The follow code is providing the ULLT observation, one-step ahead prediction and forecastfor each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude. This will produce four-hundred total figures.
 
         with open(f"GeneratingUnit{freq}_{magnitude_name}_StateSpaceModelResults.txt", 'w') as f:       #This is opening the file for the State Space Model table. This is represented as a figure
             f.write(str(result.summary()))      #This writes 400 files total. One-hundred summaries are provided for each frequency for each event magnitude
 
-        """Series forecasting is generating a forecast for 10 steps."""
+        #Series forecasting is generating a forecast for 10 steps.
 
         predict = result.get_prediction() #Produces the predictions
         forecast = result.get_forecast(steps=10)        #The number of predictions can be updated here steps = ""
@@ -173,8 +170,7 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
         df[f"GeneratingUnit{freq}"].plot(ax=ax, style='k.', label='Observations')
         predict.predicted_mean.plot(ax=ax, label='One-step-ahead Prediction')
         
-        """ The following code provides the ULLT observation, one-step ahead prediction and forecast for each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude.
-    This will produce four-hundred total figures. """
+        #The following code provides the ULLT observation, one-step ahead prediction and forecast for each event magnitude. The GeneratingUnit magnitude figure is produced for each generation unit and event magnitude. This will produce four-hundred total figures.
 
         forecast.predicted_mean.plot(ax=ax, style='r', label='Forecast')
         ax.legend(loc='lower left')             #This provides a legend for the plot
@@ -203,13 +199,13 @@ for magnitude_name, event in eventMagnitude.items(): #Loop to generate four even
 
     optimal_frequency = adaline_model.predict([[inertia_scaled.mean()]])        #Predict single synchronized frequency using the mean of scaled inertia values.
     
-    """ The optimal control frequency figure is produced for each event magnitude. This will produce four files. """
+    #The optimal control frequency figure is produced for each event magnitude. This will produce four files.
 
     f = open( f'optimal_frequency_{magnitude_name}.txt', 'w' )      #Txt file is written to write the optimal frequency value for each event magnitude
     f.write(str(optimal_frequency))     #Txt file of the optimal frequency value is written for each event magniture. This will produce four files
     f.close()
     
-    """ The follow code provides the Adaline optimal control frequency for each event magnitudue figure.  The opimal control frequency figure is produced for each event magnitude. This will produce four files. """
+    #The follow code provides the Adaline optimal control frequency for each event magnitudue figure.  The opimal control frequency figure is produced for each event magnitude. This will produce four files.
 
     plt.figure(figsize=(10, 6))     #This is the dimension of the plot for the optimal control frequency
     plt.scatter(inertia, frequency, color='blue', label='Original Data')        #The blue values represent the inertial values. 
