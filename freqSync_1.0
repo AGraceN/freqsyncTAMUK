@@ -1,7 +1,7 @@
 """Python libraries. Numpy is a Python library for numerical manipulations. Pandas is a Python library designed to make working with relational or labeld data intuitive.
 SQLAlchemy is a toolkit of Python SQL. The sqlalchemy.orm library allows developers to work with databases using an Object-Relational Mapping ORM framework allowing seamless communication
 between relational databases and object oriented programming languages. The statsmodels library is being used for statistical tasks for state spece modeling and univarient time-series analysis.
-Matplotlib is a Python library used to create the figures.  Sklearn is a machine learning library."""
+Matplotlib is a Python library used to create the figures.  Sklearn is a machine learning library.""" 
 
 import numpy as np
 import pandas as pd
